@@ -1,0 +1,470 @@
+---
+title: "Irish General Election Gender Breakdown, 2016–2020"
+author: "Daniel Waugh"
+date: "2021"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+## Irish General Election Gender Breakdown, 2016–2020
+
+Data visualisation in R: vote share, candidates fielded and candidates elected by gender in the 2016 and 2020 Irish general elections, using candidate data from the Department of Housing, Local Government and Heritage.
+
+Originally written in 2021 as coursework (TU Dublin, MSc Computer Science — Data Science). The analysis is unchanged; the assignment framing and student number have been removed, and the data now loads from local files in `data/` instead of the original live URLs.
+
+### Notes on this file
+
+- The data files in `data/` are the candidate lists for the 2016 and 2020 general elections as published by the Department of Housing, Local Government and Heritage.
+- Candidate counts in the text are counts after cleaning (rows with a missing result were dropped), not the official totals.
+- The waffle chart in Insight 3 covers the top five parties only, not all elected TDs.
+# 2.Pre-Processing	
+
+### Loading Data 
+
+```{r}
+## Pre loading all library packages
+library(ggpubr)
+library(dplyr)
+library(car)
+library(psych)
+library(Hmisc)
+library(ggplot2)
+library(gmodels)
+library(tidyverse)
+```
+
+```{r}
+## Reading the candidate datasets from data/ (originally downloaded from
+## the Department of Housing, Local Government and Heritage open data portal)
+
+geData20 <- read.csv('data/candidates-2020.csv', stringsAsFactors=FALSE, fileEncoding="latin1")
+head(geData20)
+
+geData16 <- read.csv('data/candidates-2016.csv', stringsAsFactors=FALSE, fileEncoding="latin1")
+head(geData16)
+
+```
+
+#### 2.Pre-Processing	
+
+### Cleaning Data
+
+## NA values in dataset
+
+```{r}
+
+## Values in Result column has empty/missing values
+## When I tried to identify missing values as NA it didn't work
+## I assigned blank spaces as NA 
+
+geData20[geData20==""]<- NA
+geData16[geData16==""]<- NA
+
+## Then returned data with FALSE and TRUE for NA values
+geData20$Result
+is.na(geData20$Result)
+
+geData16$Result
+is.na(geData16$Result)
+
+## I want to omit NA values later when I review breakdown of gender and elected
+na.omit(geData20$Result)
+na.omit(geData16$Result)
+
+geData20<- na.omit(geData20)
+geData16<- na.omit(geData16)
+
+```
+
+##Columns data and new info in datasets
+
+```{r}
+# Get column names
+colnames(geData20)
+colnames(geData16)
+
+# Changing columns in 2016 dataset to match 2020 dataset for consistency 
+names(geData16)[names(geData16) == "Party"] <- "Party.Id"
+names(geData16)[names(geData16) == "Gender"] <- "Gender.Id"
+
+# Changing column in 2020 dataset to match 2016 dataset for consistency 
+names(geData20)[names(geData20) == "Firstname"] <- "First.Name"
+
+# Adding new columns with the year in preparation for merging both datasets
+geData20["Year"] = "2020"
+geData16["Year"] = "2016"
+
+```
+
+
+## Values cleanup and prepartion for merge 
+ 
+```{r}
+## Changing name of values to be include special characters 
+geData20$Party.Id[geData20$Party.Id =="Fianna Fï¿½il"] <- "Fianna Fáil"
+geData20$Party.Id[geData20$Party.Id =="Sinn Fï¿½in"] <- "Sinn Fein"
+geData20$Party.Id[geData20$Party.Id =="Aontï¿½"] <- "Aontú"
+geData20$Party.Id[geData20$Party.Id =="Green Party/ Comhaontas Glas"] <- "Green Party"
+geData20$Party.Id[geData20$Party.Id =="The National Party - An Pï¿½irtï¿½ Nï¿½isiï¿½nta"] <- "The National Party"
+geData20$Party.Id[geData20$Party.Id =="Solidarity - People Before Profit"] <- "People Before Profit"
+
+
+## Changing name of values to be include special characters and be consistent with 2020 dataset
+
+#geData16$Party.Id[geData16$Party.Id =="Fianna F·il"] <- "Fianna Fáil"
+#geData16$Party.Id[geData16$Party.Id =="Sinn FÈin"] <- "Sinn Fein"
+geData16$Party.Id[geData16$Party.Id =="Green Party/ Comhaontas Glas"] <- "Green Party"
+geData20$Party.Id[geData20$Party.Id == "Anti-Austerity Alliance - People Before Profit"] <- "People Before Profit"
+
+geData16$Party.Id
+
+## Change values to be consistent for abbreviations
+
+geData16$Party.Abbreviation[geData16$Party.Abbreviation =="AAA-PBP"] <- "P.B.P."
+
+
+geData20$Party.Abbreviation[geData20$Party.Abbreviation =="S.P.B.P."] <- "P.B.P."
+
+
+```
+
+##Merging both datasets 
+
+```{r}
+geData <- rbind(geData20, geData16)
+
+# Votes column is character 
+geData$Votes <- as.numeric(as.character(geData$Votes))  # Convert string to numeric 
+
+geData
+```
+
+### Data Deep Dive
+
+# Section 1: Vote Share By Gender and Year	
+
+There were 503 candidates in the 2020 General Election. There were 154 Females (30.6%) fielded for the 2020 Irish General Election compared to 349 Males (69.4%). 
+
+```{r}
+Hmisc::describe(geData20)
+```
+
+There were 268 candidates in the 2016 General Election. There were 88 Females (32.8%) fielded for the 2016 General Election compared to 180 Males (67.2%). 
+```{r}
+Hmisc::describe(geData16)
+```
+
+Below, we see a tabled full breakdown of how many candidates each party or non-party candidates fielded during the 2020 Irish General Election:
+
+```{r}
+## Get summary of the number of candidates fielded by each party
+## Organized in ascending order to identify quickly top parties
+sort(table(geData$Party.Abbreviation), decreasing = FALSE)
+```
+
+## INSIGHT 1 - Vote Share By Gender and Year
+
+Looking at our entire dataset, without party lines. There were 161 Females (30%) fielded for the 2020 Irish General Election compared to 370 Males (70%). 
+
+```{r}
+table(geData$Gender.Id)
+```
+
+Barchart showing differences in the number of candidates by gender:
+```{r}
+df <- geData %>%
+  group_by(Gender.Id) %>% # grouping and ordering in alphabetical order
+  summarise(counts = n())
+df
+
+ggplot(geData , aes(Gender.Id)) + 
+   geom_bar(aes(fill = Gender.Id)) + # colour consistent across all graphs
+   ggtitle('Summary Of Candidates') + # titling graph
+   labs(y="Number of Candidates", x = "Party") + # labelling x and y
+   theme(axis.text=element_text(size=5), legend.position = "none") # smaller font to fit party abbreviations 
+# removed the legend because it's cluttering the graph
+
+```
+Using descriptive statistics, we see the Median for Female candidates (2957.19) is different than Male candidates (3441). Indicates there is a positive skew to the right (1.98) for votes for Female candidates and for Male Candidates (1.28).
+
+```{r}
+## Summarize median of votes by gender and yer
+geData %>% group_by(Gender.Id,) %>% summarise(median(Votes))
+```
+
+```{r}
+#Iteration 4.1
+
+geData %>% 
+   ggplot(aes(Votes, colour=factor(Gender.Id))) + 
+   geom_density(aes(y=..scaled..)) + 
+   ggtitle('Vote Share by Gender in Both Elections') + labs(y="Scale", x = "Number of Votes")  +
+   facet_wrap(~Year, scale="fixed") + 
+   scale_color_discrete(name="Gender",labels = c("Female", "Male")) 
+```
+Plotting breakdown of gender and vote share shows a number of outliers for both Females and Males. 
+
+It's clear that there is a higher vote share among Males with a higher median compared to Female candidates. 
+
+An explanation for this could be related to the number of Female candidates (30%) versus Male candidates (70%) meaning the larger vote share is down purely to numbers.
+
+```{r}
+## Plotting Gender and Votes 
+qplot(data = geData, x = Gender.Id, y = Votes, geom = 'boxplot', show.legend = FALSE,
+ varwidth=TRUE,
+ fill=Gender.Id,
+ main="Vote Share Among Gender in 2020 and 2016",
+ xlab="Gender",
+ ylab="Votes")
+
+qplot(data = geData20, x = Gender.Id, y = Votes, geom = 'boxplot', show.legend = FALSE,
+ varwidth=TRUE,
+ fill=Gender.Id,
+ main="Vote Share Among Gender in 2020",
+ xlab="Gender",
+ ylab="Votes")
+
+qplot(data = geData16, x = Gender.Id, y = Votes, geom = 'boxplot', show.legend = FALSE,
+ varwidth=TRUE,
+ fill=Gender.Id,
+ main="Vote Share Among Gender in 2016",
+ xlab="Gender",
+ ylab="Votes")
+```
+```{r}
+## Plotting in one plot
+ggplot(geData, aes(x= Year, y=Votes, fill=Gender.Id)) + 
+    geom_boxplot() +
+    facet_wrap(~Gender.Id)
+```
+```{r}
+# Iteration conveying both genders by year
+ggplot(geData, aes(x=Year, y=Votes, fill=Gender.Id)) + 
+    geom_boxplot() +
+    facet_wrap(~Year, scale="free") + 
+   ggtitle('Vote Share Among Gender in 2016 and 2020') + labs(y="Number of Votes", x = "Year of General Election") + 
+   scale_fill_discrete(name = "Gender", labels = c("Female", "Male"))
+```
+
+```{r}
+
+# Final iteration conveying votes bu gender with a fixed scale
+ggplot(geData, aes(x=Year, y=Votes, fill=Gender.Id)) + 
+    geom_boxplot() +
+    facet_wrap(~Gender.Id, scale="fixed") + 
+   ggtitle('Vote Share Among Gender in 2016 and 2020', subtitle = 'Female candidates received just 30% votes compared to Male candidates at 70%') + labs(y="Number of Votes", x = "Year of General Election") + 
+   scale_fill_discrete(name = "Gender", labels = c("Female", "Male"))
+
+
+```
+
+Female candidates received an average of 2503 votes compared to Male candidates with 3441 votes. 
+```{r}
+geData %>% group_by(Gender.Id) %>% summarise(median(Votes))
+```
+
+Female candidates received, on average, around 65% (2016) or 61% (2020) the number of votes that Male candidates received in the 2020 Irish General Election. 
+```{r}
+4216 * 100 / 6469 #2016
+3708.5 * 100 / 6035.5 #2020
+```
+
+
+
+## INSIGHT #2 - Candidates Fielded by Gender by Top Five Parties
+
+For the purpose of this analysis, we will focus on the top 5 parties who received the highest vote share in the 2020 Irish General Election versus the total number of candidates fielded, where relevant.
+
+Given the number of outliers, we will use the median of votes. For this purpose we will select: FF (5753), FG (5456), LAB (2208), SF (12539), GP (3650). 
+
+```{r}
+## Summarize median of votes by party
+geData %>% group_by(Party.Abbreviation) %>% summarise(median(Votes))
+```
+
+Checking data to determine parties which received the highest portion of votes. The range of votes received by SF surpass any other party. 
+```{r}
+## Assigning new data frame with the top five parties
+geDatatop <- filter(geData, Party.Abbreviation %in% c('F.F.', 'F.G.', 'G.P.','LAB.', 'S.F.'))
+table(geDatatop$Gender.Id)
+
+geDatatop20 <- filter(geData20, Party.Abbreviation %in% c('F.F.', 'F.G.', 'G.P.','LAB.', 'S.F.'))
+table(geData20$Party.Abbreviation)
+
+geDatatop16 <- filter(geData16, Party.Abbreviation %in% c('F.F.', 'F.G.', 'G.P.','LAB.', 'S.F.'))
+table(geData16$Party.Abbreviation)
+```
+
+Plotting the top five parties. We see SF hast a higher vote share than any other party, despite only fielding half (42) the number of candidates compared to FF (82) and FG (81).
+```{r}
+
+geData %>% group_by(Party.Abbreviation, Year) %>% summarise(median(Votes))
+
+
+## Top five parties
+## Plotted visually in ascending order of vote share
+qplot(data = geDatatop, reorder(Party.Abbreviation, Votes), y = Votes, geom = 'boxplot',
+ varwidth=TRUE, show.legend = FALSE,
+fill=Party.Abbreviation,
+ main="Vote Share Among Top Parties in Both Elections", subtitle = 'Male candidates outweighed female candidates 2-1 in F.F. and F.G. in both elections ',
+ xlab="Party",
+ ylab="Votes") +
+    facet_wrap(~Year, scale="fixed") + 
+   scale_fill_discrete(name = "Gender", labels = c("Female", "Male"))
+
+```
+
+Below, we see a breakdown of the number of Female and Male candidates fielded by each of the top 5 parties.
+
+```{r}
+## Table 
+table(geDatatop$Gender.Id, geDatatop$Party.Abbreviation, geDatatop$Year)
+```
+
+In 2012, Ireland introduced a 30% gender quota for party candidates at general elections. We can see that each of the top parties reached that quota with FF and FG just passing the quota. 
+```{r}
+
+# 2016
+14 * 100 / 40 # FF
+12 * 100 / 39 # FG
+8 * 100 / 22 # GP
+8 * 100 / 18 # LAB
+11 * 100 / 29 # SF
+
+# 2020
+25 * 100 / 75 # FF
+23 * 100 / 77 # FG
+14 * 100 / 35 # GP
+10 * 100 / 31 # LAB
+14 * 100 / 40 # SF
+```
+
+When we plot the breakdown of gender, we can see that candidates are largely Male across the party spectrum, accounting for 60 - 70% of candidates.
+
+```{r}
+## Creating histogram to share breakdown of Female and Male candidates by party
+## Changing labels
+ggplot(geDatatop, aes(Party.Abbreviation, ..count..)) +
+   geom_bar(aes(fill = Gender.Id), position = "dodge") + 
+   ggtitle('Candidates For Top Parties By Gender') + 
+   labs(y="Number of Candidates", x = "Party") + 
+   theme(axis.text=element_text(size=10)) +
+    facet_wrap(~Gender.Id, scale="fixed") + 
+   scale_fill_discrete(name = "Gender", labels = c("Female", "Male"))
+
+## Creating histogram to share breakdown of Female and Male candidates by party
+## Changing to convey breakdown of both by year instead
+ggplot(geDatatop, aes(Party.Abbreviation, ..count..)) +
+   geom_bar(aes(fill = Gender.Id), position = "dodge") + 
+   ggtitle('Candidates for Top Parties by Gender in 2016 and 2020', subtitle = 'Male candidates outweighed female candidates 2-1 in F.F. and F.G. in both elections ') + 
+   labs(y="Number of Candidates", x = "Party") + 
+   theme(axis.text=element_text(size=10)) +
+    facet_wrap(~Year, scale="fixed")
+```
+
+## INSIGHT 3 - Candidates Elected by Gender	
+
+Number of candidates elected or excluded based on total number of votes by Gender. More Male candidates were Elected than Female candidates.  
+
+```{r}
+# Using the cleaned up data for Result with missing values
+# Excluding all the missing values 
+geData <- filter(geData, Party.Abbreviation %in% c('F.F.', 'F.G.', 'G.P.','LAB.', 'S.F.'))
+table(geData$Result, geData$Gender.Id, geData$Year)
+```
+
+Plotting the data emphasizes the difference even further. With 30 - 40% of candidates being Female, we only saw 20% of candidates elected to Dáil Éireann being Female.
+```{r}
+## Creating histogram to share breakdown of Female and Male candidates elected and excluded by party
+ggplot(geDatatop, aes(Result, ..count..)) + 
+   geom_bar(aes(fill = Gender.Id), position = "dodge") + 
+   ggtitle('Candidates Elected or Excluded For Top Parties By Gender') + 
+   labs(y="Number of Candidates", x = "Elected To Dáil Éireann") + 
+   theme(axis.text=element_text(size=10)) 
+
+
+## Creating histogram to share breakdown of Female and Male candidates by party and by year
+## Changing labels
+ggplot(geDatatop, aes(Result, ..count..)) + 
+   geom_bar(aes(fill = Gender.Id), position = "dodge") + 
+   ggtitle('Candidates Elected or Excluded For Top Parties By Gender', subtitle = 'More men are elected as TDs than women') + 
+   labs(y="Number of Candidates", x = "Elected To Dáil Éireann") + 
+   theme(axis.text=element_text(size=10)) +
+   facet_wrap(~Year, scale="fixed") + 
+   scale_fill_discrete(name = "Gender", labels = c("Female", "Male"))
+
+```
+Below we have plotted the total number of candidates who were elected to Dáil Éireann in the 2020 Irish General Election across every party and non-party. SF eleted 
+```{r}
+# Using the cleaned up data for Result with missing values
+# Excluding all the missing values 
+geDataElected <- filter(geData, Result == 'Elected')
+geDataElected16 <- filter(geData16, Result == 'Elected')
+geDataElected20 <- filter(geData20, Result == 'Elected')
+
+# Tabling the values for a quick sense check
+library(janitor)
+tabyl(geDataElected$Party.Abbreviation, sort = TRUE) # Ordered alphabetically to be consistent in report
+tabyl(geDataElected16$Party.Abbreviation, sort = TRUE) # Ordered alphabetically to be consistent in report
+tabyl(geDataElected20$Party.Abbreviation, sort = TRUE) # Ordered alphabetically to be consistent in report
+
+table(geDataElected$Party.Abbreviation, geDataElected$Gender.Id, geDataElected$Year)
+table(geDataElected$Gender.Id, geDataElected$Year)
+
+16 * 100 / 71 # Total % of female TDs in 2016
+26 * 100 / 137 # Total % of female TDs in 2020
+
+```
+
+Plotting candidates elected by top parties combined from two elections.
+```{r}
+
+# Plotting this table onto a graph
+ggplot(geDataElected, aes(Party.Abbreviation, ..count..)) + 
+   geom_bar(aes(fill = Party.Abbreviation), position = "dodge") + # consistent colours in all graphs
+   ggtitle('Candidates Elected in Top Parties in Both Elections') + # titling graph
+   labs(y="Number of Candidates", x = "Party") + # naming labels
+   theme(axis.text=element_text(size=5), legend.position = "none") # changing font size to fit onto plot
+```
+Plotting candidates elected in the two elections for insight 3.
+```{r}
+
+geDataTopElected <- filter(geDataElected, Party.Abbreviation %in% c('F.F.', 'F.G.', 'G.P.','LAB.', 'S.F.'))
+table(geDataTopElected$Party.Abbreviation, geDataTopElected$Gender.Id, geDataTopElected$Year)
+# Plotting this table onto a graph
+
+ggplot(geDataElected, aes(Party.Abbreviation, ..count..)) + 
+   geom_bar(aes(fill = Gender.Id), position = "dodge") + # consistent colours in all graphs
+   ggtitle('Candidates Elected for Top Parties in 2016 and 2020', subtitle = 'More women elected in 2020 than 2016, but men still outnumber women in 2020') + # titling graph
+   labs(y="Number of Candidates", x = "Party") + # naming labels
+   theme(axis.text=element_text(size=5))  +
+   facet_wrap(~Year, scale="fixed") + 
+   scale_fill_discrete(name = "Gender", labels = c("Female", "Male")) 
+
+```
+```{r}
+# install.packages("waffle")
+# install.packages("extrafont")
+library(hrbrthemes)
+library(ggplot2)
+library(dplyr)
+library(extrafont)
+#font_import()
+#fonts()[grep("Awesome", fonts())]
+
+table(geDataElected$Gender.Id, geDataElected$Year)
+
+geDataGenderElected2020 <- c('Female' = (26),'Male' = (101))
+geDataGenderElected2020
+
+library(waffle)
+
+# waffle(c(50, 30, 15, 5), rows = 10, title = "Your Title")
+
+waffle2020 <- waffle(geDataGenderElected2020, rows = 5, size = 3, colors = c("#f35e5a", "#17b3b7"), xlab="") + 
+   ggtitle('Candidates Elected by Gender in 2020', subtitle = 'Male TDs outnumber female TDs by 5:1')
+waffle2020
+
+
+```
